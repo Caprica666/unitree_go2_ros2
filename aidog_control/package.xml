@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>aidog_control</name>
+  <version>0.37.1</version>
+  <description>Actions and services for controlling AI dog robot</description>
+
+  <maintainer email="noladonato@gmail.com">Nola Donato</maintainer>
+
+  <license>Apache License 2.0</license>
+
+  <author email="noladonato@gmail.com">Nola Donato</author>
+
+  <exec_depend>rclpy</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>ament_xmllint</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

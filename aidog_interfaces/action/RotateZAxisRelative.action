@@ -1,0 +1,13 @@
+# Goal
+float64 turn_angle
+float64 start_angle
+float64 angular_velocity # in radians / sec
+---
+# Result
+float64 end_angle    # start_angle + turn_angle if successful
+float64 elapsed_time # in seconds
+bool success         # true if robot turned, false if not
+string message
+---
+# Feedback
+float64 current_angle  # current angle in radians
