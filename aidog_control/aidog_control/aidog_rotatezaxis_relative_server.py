@@ -24,67 +24,29 @@ from rclpy.action import ActionServer, CancelResponse
 from rclpy.executors import ExternalShutdownException
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from rclpy.parameter import Parameter
+
 from rclpy.qos import qos_profile_system_default
 from rclpy.service_introspection import ServiceIntrospectionState
-
+from threading import Event
 
 class RotateZAxisRelativeServer(Node):
 
     def __init__(self):
         super().__init__('aidog_rotatezaxis_relative_server')
+        self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, True)])
+
         self._action_server = ActionServer(
             self,
-            RotateZAxisRelativeServer,
-            'rotate_zaxis_relative',
+            RotateZAxisRelative,
+            'rotatezaxis_relative',
             self.execute_callback,
             cancel_callback=self.cancel_callback)
         self.velocity_publisher = self.create_publisher(Twist, 'cmd_vel', 1)
-        self.add_on_set_parameters_callback(self.on_set_parameters_callback)
-        self.add_post_set_parameters_callback(self.on_post_set_parameters_callback)
-        self.declare_parameter('action_server_configure_introspection', 'disabled')
-        # TODO: get angular velocity from another Node
-        self.angular_velocity = 0.1  # radians per second
-
-    def _check_parameter(self, parameter_list, parameter_name):
-        result = SetParametersResult()
-        result.successful = True
-        for param in parameter_list:
-            if param.name != parameter_name:
-                continue
-
-            if param.type_ != Parameter.Type.FLOAT:
-                result.successful = False
-                result.reason = 'must be a number'
-                break
-
-            if param.value not in ('disabled', 'metadata', 'contents'):
-                result.successful = False
-                result.reason = "must be one of 'disabled', 'metadata', or 'contents"
-                break
-
-        return result
-
-    def on_set_parameters_callback(self, parameter_list) -> SetParametersResult:
-        return self._check_parameter(parameter_list, 'action_server_configure_introspection')
-
-    def on_post_set_parameters_callback(self, parameter_list):
-        for param in parameter_list:
-            if param.name != 'action_server_configure_introspection':
-                continue
-
-            introspection_state = ServiceIntrospectionState.OFF
-            if param.value == 'disabled':
-                introspection_state = ServiceIntrospectionState.OFF
-            elif param.value == 'metadata':
-                introspection_state = ServiceIntrospectionState.METADATA
-            elif param.value == 'contents':
-                introspection_state = ServiceIntrospectionState.CONTENTS
-
-            self._action_server.configure_introspection(self.get_clock(),
-                                                        qos_profile_system_default,
-                                                        introspection_state)
-            break
+        self.get_logger().info('Started RotateZAxisRelativeServer node')
+        self.finish_event = Event()
+        self.finish_event.clear()
+        self.result = RotateZAxisRelative.Result()
+        self.feedback_msg = RotateZAxisRelative.Feedback()
 
     def rotatezaxis_relative(self, angular_velocity):
         twist = Twist()
@@ -99,45 +61,72 @@ class RotateZAxisRelativeServer(Node):
         
     def execute_callback(self, goal_handle):
         self.get_logger().info('Executing goal...')
-
-        feedback_msg = RotateZAxisRelative.Feedback()
-        feedback_msg.current_angle = goal_handle.request.start_angle
-        feedback_msg.message = 'Starting rotation'
-        angular_velocity = goal_handle.request.angular_velocity
-        start_time = self.get_clock().now()
-        elapsed = 0.0
-        duration = goal_handle.request.turn_angle / angular_velocity
+        self.goal = goal_handle.request
+        self.goal_handle = goal_handle
+        angular_velocity = self.goal.angular_velocity
+        self.current_angle = self.goal.start_angle
+        self.elapsed = 0.0
+        self.result.success = False
+        self.result.atend = False
+        duration = abs(goal_handle.request.turn_angle) / angular_velocity
+        self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(self.goal.turn_angle, duration))
+        self.feedback_msg = RotateZAxisRelative.Feedback()
+        self.feedback_timer = self.create_timer(0.2, self.publish_feedback)
+        self.result_timer = self.create_timer(duration, self.publish_result)
+        self.feedback_timer.reset()
+        self.result_timer.reset()
         self.rotatezaxis_relative(angular_velocity)
-        while elapsed < duration:
-            current_angle = elapsed * angular_velocity + goal_handle.request.start_angle
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                self.get_logger().info('Goal canceled')
-                result = RotateZAxisRelative.Result()
-                result.success = False
-                result.end_angle = current_angle
-                result.elapsed_time = self.elapsed
-                result.message = 'ERROR: Rotation canceled'
-                return result
-            feedback_msg.message = 'Continuing rotation'
-            feedback_msg.elapsed_time = self.elapsed
-            feedback_msg.current_angle = current_angle
-            self.get_logger().info('Feedback: current_angle {0}'.format(feedback_msg.current_angle))
-            goal_handle.publish_feedback(feedback_msg)            
-            time.sleep(0.1)
-            now = self.get_clock().now()
-            elapsed = (now - start_time).nanoseconds / 1e9  # seconds
-        goal_handle.succeed()
-        result = RotateZAxisRelative.Result()
-        result.success = True
-        result.end_angle = current_angle
-        result.elapsed_time = elapsed
-        result.message = 'Rotation successful'
-        return result
-
+        self.finish_event.wait()
+        
+        self.finish_event.clear()
+        self.get_logger().info('Returning result: last_angle {0} elapsed_time {1}'.format(self.current_angle, self.elapsed))
+        if self.result.success:
+            return self.result
+        else:
+            return CancelResponse.ACCEPT
+    
+    def publish_feedback(self):
+        atend = ((self.goal.turn_angle > 0) & (self.current_angle >= self.goal.end_angle)) | \
+                ((self.goal.turn_angle < 0) & (self.current_angle <= self.goal.end_angle))
+        self.elapsed += self.feedback_timer.timer_period_ns / 1e9  # Convert nanoseconds to seconds
+        self.current_angle += self.goal.turn_angle
+        if atend:
+            self.get_logger().info('Reached end angle: {0}'.format(self.current_angle))
+            self.result.atend = True
+            self.publish_result()
+            return
+        
+        if self.goal_handle.is_cancel_requested:
+            self.cancel_callback(self.goal)
+            return
+        
+        self.feedback_msg.current_angle = self.current_angle
+        self.feedback_msg.current_time = self.elapsed
+        self.get_logger().info('Publishing feedback: current_angle {0} current_time {1}'.format(self.current_angle, self.elapsed))
+        self.goal_handle.publish_feedback(self.feedback_msg)
+        
+    def publish_result(self):
+        self.feedback_timer.cancel()
+        self.result_timer.cancel()
+        self.result.last_angle = self.current_angle
+        self.result.elapsed_time = self.elapsed
+        self.result.success = True
+        self.result.message = 'Rotation successful'
+        self.rotatezaxis_relative(0.0)  # Stop the robot after rotation
+        self.goal_handle.succeed()
+        self.finish_event.set()
+               
     def cancel_callback(self, goal_handle):
+        self.feedback_timer.cancel()
+        self.result_timer.cancel()
+        self.goal_handle.canceled()
+        self.get_logger().info('Goal canceled')
+        self.result.success = False
+        self.result.message = 'ERROR: Rotation canceled'
+        self.result.last_angle = self.current_angle
+        self.result.elapsed_time = self.elapsed
         self.get_logger().info('Canceling goal...')
-        return CancelResponse.ACCEPT
+        return
 
 def main(args=None):
     try:
