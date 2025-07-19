@@ -29,6 +29,8 @@ setup(
         'console_scripts': [
             'aidog_rotatezaxis_relative_server = aidog_control.aidog_rotatezaxis_relative_server:main',
             'aidog_rotatezaxis_relative_client = aidog_control.aidog_rotatezaxis_relative_client:main',
+            'aidog_get_camera_image = aidog_control.aidog_camera_image_service:main',
+            'aidog_camera_image_client = aidog_control.aidog_camera_image_client:main',
         ],
     },
 )

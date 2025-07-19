@@ -25,6 +25,15 @@
       name="gz::sim::systems::SceneBroadcaster">
     </plugin>
     
+    
+    <gui fullscreen="0">
+        <plugin filename="ImageDisplay" name="Image Display">
+          <ignition-gui>
+            <property key="state" type="string">docked</property>
+          </ignition-gui>
+        </plugin>
+    </gui>
+    
     <!-- Lights -->
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>

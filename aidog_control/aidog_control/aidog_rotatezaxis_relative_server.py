@@ -25,8 +25,6 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
-from rclpy.qos import qos_profile_system_default
-from rclpy.service_introspection import ServiceIntrospectionState
 from threading import Event
 
 class RotateZAxisRelativeServer(Node):

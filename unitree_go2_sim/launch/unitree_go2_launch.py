@@ -163,7 +163,7 @@ def generate_launch_description():
         package='rviz2',
         executable='rviz2',
         name='rviz2',
-        arguments=['-d', os.path.join(unitree_go2_sim, "rviz/urdf_viewer.rviz")],
+        arguments=['-d', os.path.join(unitree_go2_sim, "rviz/rviz.rviz")],
         condition=IfCondition(LaunchConfiguration("rviz")),
         # parameters=[{"use_sim_time": use_sim_time}]
     )
