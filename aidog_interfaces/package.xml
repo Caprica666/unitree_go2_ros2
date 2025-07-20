@@ -12,9 +12,12 @@
   <author email="noladonato@gmail.com">Nola Donato</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <depend>ros2cli</depend>
+  <depend>ros2web_interfaces</depend>
   <build_depend>sensor_msgs</build_depend>
+  
   <exec_depend>rosidl_default_runtime</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   

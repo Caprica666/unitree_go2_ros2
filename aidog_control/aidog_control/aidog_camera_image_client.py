@@ -9,7 +9,7 @@ import sys
 class CameraImageClient(Node):
     def __init__(self, width=None, height=None):
         super().__init__('camera_image_client')
-        self.cli = self.create_client(GetCameraImage, 'aidog_get_camera_image')
+        self.cli = self.create_client(GetCameraImage, 'http/get/aidog_camera_image')
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service not available, waiting...')
         self.req = GetCameraImage.Request()
