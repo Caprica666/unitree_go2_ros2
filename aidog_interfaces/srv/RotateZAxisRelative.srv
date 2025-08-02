@@ -1,0 +1,12 @@
+# Goal
+float32 turn_angle
+float32 start_angle
+float32 angular_velocity # in radians / sec
+float32 end_angle
+---
+# Result
+float32 last_angle    # start_angle + turn_angle if successful
+float32 elapsed_time  # in seconds
+bool success          # true if robot turned, false if not
+bool atend            # true if end angle was reached
+string message

@@ -17,6 +17,7 @@ find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/RotateZAxisRelative.action"
+  "srv/RotateZAxisRelative.srv"
   "srv/GetCameraImage.srv"
   DEPENDENCIES sensor_msgs
 )

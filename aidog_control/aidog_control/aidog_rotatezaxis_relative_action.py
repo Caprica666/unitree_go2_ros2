@@ -17,7 +17,6 @@ import time
 
 from aidog_interfaces.action import RotateZAxisRelative
 from geometry_msgs.msg import Twist
-from rcl_interfaces.msg import SetParametersResult
 
 import rclpy
 from rclpy.action import ActionServer, CancelResponse
