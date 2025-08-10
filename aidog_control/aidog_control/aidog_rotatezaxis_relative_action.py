@@ -61,7 +61,7 @@ class RotateZAxisRelativeServer(Node):
         self.goal = goal_handle.request
         self.goal_handle = goal_handle
         angular_velocity = self.goal.angular_velocity
-        self.current_angle = self.goal.start_angle
+        self.current_angle = self.goal.current_angle
         self.elapsed = 0.0
         self.result.success = False
         self.result.atend = False

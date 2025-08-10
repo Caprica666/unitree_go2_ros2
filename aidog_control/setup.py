@@ -28,11 +28,14 @@ setup(
     entry_points={
         'console_scripts': [
             'aidog_rotatezaxis_relative_service = aidog_control.aidog_rotatezaxis_relative_service:main',
+            'aidog_rotatezaxis_absolute_service = aidog_control.aidog_rotatezaxis_absolute_service:main',
             'aidog_rotatezaxis_relative_client = aidog_control.aidog_rotatezaxis_relative_client:main',
+            'aidog_rotatezaxis_absolute_client = aidog_control.aidog_rotatezaxis_absolute_client:main',
             'aidog_get_camera_image = aidog_control.aidog_camera_image_service:main',
             'aidog_camera_image_client = aidog_control.aidog_camera_image_client:main',
             'aidog_web_camera_image = aidog_control.aidog_web_camera_image_service:main',
             'aidog_web_rotatezaxis_relative = aidog_control.aidog_web_rotatezaxis_relative_service:main',
+            'aidog_web_rotatezaxis_absolute = aidog_control.aidog_web_rotatezaxis_absolute_service:main',
         ],
     },
 )

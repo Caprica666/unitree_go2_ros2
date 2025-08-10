@@ -36,7 +36,7 @@ class RotateZAxisRelativeClient(Node):
         self.get_logger().info('Started RotateZAxisRelativeClient node')
 
     def send_goal(self, turn_angle, start_angle, angular_velocity, end_angle):
-        goal_msg = RotateZAxisRelative.Goal()
+        goal_msg = RotateZAxis.Goal()
         goal_msg.turn_angle = turn_angle
         goal_msg.start_angle = start_angle
         goal_msg.angular_velocity = angular_velocity

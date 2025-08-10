@@ -1,13 +1,9 @@
 # Goal
-float32 turn_angle       # amount to turn in degrees
-                         # positive is clockwise, negative is counterclockwise
-float32 current_angle    # starting angle in degrees
+float32 turn_angle       # angle to turn to in degrees
 float32 angular_velocity # turn speed in degrees / sec
-float32 end_angle
 ---
 # Result
 float32 last_angle    # current_angle + turn_angle if successful
 float32 elapsed_time  # in seconds
 bool success          # true if robot turned, false if not
-bool atend            # true if end angle was reached
 string message        # error or status message
