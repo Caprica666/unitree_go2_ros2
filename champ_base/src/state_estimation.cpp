@@ -41,6 +41,7 @@ StateEstimation::StateEstimation():
 {
     last_vel_time_ = clock_.now();
     last_sync_time_ = clock_.now();
+    heading_ = 0.0;
     base_broadcaster_ =
       std::make_unique<tf2_ros::TransformBroadcaster>(*this);
       
@@ -151,7 +152,7 @@ void StateEstimation::publishFootprintToOdom_()
 
     rclcpp::Time current_time = clock_.now();
 
-    double vel_dt = (current_time - last_vel_time_).nanoseconds()/1e-9;
+    double vel_dt = (current_time - last_vel_time_).nanoseconds()*1e-9;
     last_vel_time_ = current_time;
     //rotate in the z axis
     //https://en.wikipedia.org/wiki/Rotation_matrix
@@ -163,6 +164,8 @@ void StateEstimation::publishFootprintToOdom_()
     x_pos_ += delta_x;
     y_pos_ += delta_y;
     heading_ += delta_heading;
+    //RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "heading %f", heading_);
+
 
     //calculate robot's heading_ in quaternion angle
     tf2::Quaternion odom_quat;
