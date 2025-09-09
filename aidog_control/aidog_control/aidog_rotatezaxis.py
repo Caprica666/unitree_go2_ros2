@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 
 from threading import Event
-from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 import numpy as np
@@ -52,9 +52,6 @@ class RotateZAxis(Node):
         self.finish_event = Event()
         self.finish_event.clear()
         if absolute:
-            #self.pose_subscriber = self.create_subscription(PoseWithCovarianceStamped, 'base_to_footprint_pose',
-            #                                                self.pose_callback, 1,
-            #                                                callback_group=self.callback_group)
             self.pose_subscriber = self.create_subscription(Odometry, '/odom/raw',
                                                             self.pose_callback, 1,
                                                             callback_group=self.callback_group)
@@ -62,7 +59,14 @@ class RotateZAxis(Node):
             self.clock_subscriber = self.create_subscription(Clock, '/clock',
                                                             self.clock_callback, 1,
                                                             callback_group=self.callback_group)
-    
+    def stop(self):
+        self.get_logger().info('Stopping RotateZAxis node')
+        if self.velocity_publisher is not None:
+            self.rotatezaxis_relative(0.0)  # Ensure to stop the robot
+        self.velocity_publisher.destroy()
+        self.velocity_publisher = None
+        self.destroy_node()
+        
     def get_time(self):
         t = self.get_clock().now()
         seconds, nanos = t.seconds_nanoseconds()
@@ -106,6 +110,7 @@ class RotateZAxis(Node):
         t = msg.clock
         t = msg.clock.sec + msg.clock.nanosec * 1e-9
         dt = t - self.starting_time
+        #self.get_logger().info(f'elapsed time: {dt}')
         if dt >= self.duration:
             self.publish_result()
 
@@ -122,17 +127,6 @@ class RotateZAxis(Node):
         q = quaternion.quaternion(x, y, z, w)
         q = q.normalized()
         arr = quaternion.as_euler_angles(q)  # Convert quaternion to euler angles
-        #w, x, y, z = q.w, q.x, q.y, q.z
-        #sinr_cosp = 2 * (w * x + y * z)
-        #cosr_cosp = 1 - 2 * (x * x + y * y)
-        #roll = np.arctan2(sinr_cosp, cosr_cosp)
-
-        #sinp = 2 * (w * y - z * x)
-        #pitch = np.arcsin(sinp)
-
-        #siny_cosp = 2 * (w * z + x * y)
-        #cosy_cosp = 1 - 2 * (y * y + z * z)
-        #yaw = np.arctan2(siny_cosp, cosy_cosp)
         return arr[0], arr[1], arr[2]
           
     def handle_rotatezaxis(self, turn_angle, angular_velocity, start_angle, end_angle):
@@ -147,7 +141,6 @@ class RotateZAxis(Node):
             self.get_logger().error(response['message'])
             return response
         if self.absolute:
-            #start_angle = self.lookup_zrotation()
             start_angle = self.zrot
             turn_angle = turn_angle - start_angle
             self.get_logger().info('Requesting rotation: turn_angle {0} angular_velocity {1} start_angle {2}'.format(turn_angle, angular_velocity, start_angle))
