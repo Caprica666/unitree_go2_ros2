@@ -1,26 +1,7 @@
 #!/usr/bin/env python3
-# Copyright 2019 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-# The program has a short runtime, so you can directly set the parameter
-# "action_client_configure_introspection" at execution command
-# e.g.
-# ros2 run aidog_control rotatezaxis_relative_client --ros-args -p
-# "action_client_configure_introspection:=contents"
 
 from aidog_interfaces.action import RotateZAxisRelative
-
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.executors import ExternalShutdownException
@@ -32,11 +13,11 @@ class RotateZAxisRelativeClient(Node):
 
     def __init__(self):
         super().__init__('rotatezaxis_relative_client')
-        self._action_client = ActionClient(self, RotateZAxisRelative, 'rotatezaxis_relative')
+        self._action_client = ActionClient(self, RotateZAxisRelative, 'aidog_rotatezaxis_relative')
         self.get_logger().info('Started RotateZAxisRelativeClient node')
 
     def send_goal(self, turn_angle, start_angle, angular_velocity, end_angle):
-        goal_msg = RotateZAxis.Goal()
+        goal_msg = RotateZAxisRelative.Goal()
         goal_msg.turn_angle = turn_angle
         goal_msg.start_angle = start_angle
         goal_msg.angular_velocity = angular_velocity
@@ -49,7 +30,6 @@ class RotateZAxisRelativeClient(Node):
         self._send_goal_future = self._action_client.send_goal_async(
             goal_msg,
             feedback_callback=self.feedback_callback)
-
         self._send_goal_future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):

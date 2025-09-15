@@ -44,8 +44,6 @@ class RotateZAxis(Node):
         self.twist.angular.z = 0.0
         self.deg2rad = 3.141592653589793 / 180.0
         self.absolute = absolute
-        self.world_frame = 'base_link'
-        self.robot_frame = 'trunk'
         self.starting_time = self.get_time()
         self.duration = 0.0
         self.zrot = 0.0
@@ -63,7 +61,7 @@ class RotateZAxis(Node):
         self.get_logger().info('Stopping RotateZAxis node')
         if self.velocity_publisher is not None:
             self.rotatezaxis_relative(0.0)  # Ensure to stop the robot
-        self.velocity_publisher.destroy()
+        self.node.destroy_publisher(self.velocity_publisher)
         self.velocity_publisher = None
         self.destroy_node()
         
@@ -130,16 +128,16 @@ class RotateZAxis(Node):
         return arr[0], arr[1], arr[2]
           
     def handle_rotatezaxis(self, turn_angle, angular_velocity, start_angle, end_angle):
-        response = { }
-        response['atend'] = False
-        response['message'] = 'robot successfully turned'
+        self.response = { }
+        self.response['at_end'] = False
+        self.response['success'] = False
+        self.response['message'] = 'robot successfully turned'
         # Absolute rotation - ignore start_angle and end_angle
         # Compute amount to turn to get from current robot angle to turn_angle
         if angular_velocity <= 0:
-            response['success'] = False
-            response['message'] = 'error: angular_velocity must be greater than 0'
-            self.get_logger().error(response['message'])
-            return response
+            self.response['message'] = 'error: angular_velocity must be greater than 0'
+            self.get_logger().error(self.response['message'])
+            return self.response
         if self.absolute:
             start_angle = self.zrot
             turn_angle = turn_angle - start_angle
@@ -150,44 +148,40 @@ class RotateZAxis(Node):
             if turn_angle > 0:
                 max_angle = end_angle - start_angle
                 if max_angle < 0:
-                    response['success'] = False
-                    response['message'] = 'error: turn_angle is positive but end_angle is less than start_angle'
-                    self.get_logger().error(response['message'])
-                    return response
+                    self.response['message'] = "error: turn_angle " + str(turn_angle) + " is positive but end_angle " + str(end_angle) + " is less than start_angle " + str(start_angle)
+                    self.get_logger().error(self.response['message'])
+                    return self.response
                 if max_angle < turn_angle:
                     turn_angle = max_angle
-                    response['atend'] = True
-                    response['message'] = 'robot at end angle'
+                    self.response['at_end'] = True
+                    self.response['message'] = 'robot at end angle'
             elif turn_angle < 0:
                 min_angle = end_angle - start_angle
                 if min_angle > 0:
-                    response['success'] = False
-                    response['message'] = 'error: turn_angle is negative but end_angle is greater than start_angle'
-                    self.get_logger().error(response['message'])
-                    return response
+                    self.response['message'] = "error: turn_angle " + str(turn_angle) + " is negative but end_angle " + str(end_angle) + " is greater than start_angle " + str(start_angle)
+                    self.get_logger().error(self.response['message'])
+                    return self.response
                 if min_angle > turn_angle:
                     turn_angle = min_angle
-                    response['atend'] = True
-                    response['message'] = 'robot at end angle' 
+                    self.response['at_end'] = True
+                    self.response['message'] = 'robot at end angle' 
             self.get_logger().info('Requesting rotation: turn_angle {0} angular_velocity {1}'.format(turn_angle, angular_velocity))
         duration = abs(turn_angle) / angular_velocity         
         self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(turn_angle, duration))
-
+        self.response['last_angle'] = start_angle + turn_angle
+        self.response['elapsed_time'] = duration
+        self.response['message'] += ' last_angle {0} elapsed_time {1}'.format(self.response['last_angle'], duration)
+        self.response['success'] = True
         if turn_angle != 0:
             self.rotatezaxis_relative(angular_velocity)
             self.starting_time = self.get_time()
             self.duration = duration
             self.finish_event.wait()
-            self.finish_event.clear()
-        
-        response['success'] = True
-        response['last_angle'] = start_angle + turn_angle
-        response['elapsed_time'] = duration
-        response['message'] += ' last_angle {0} elapsed_time {1}'.format(response['last_angle'], duration)
+            self.finish_event.clear()       
         if self.absolute:
             self.get_logger().info('Absolute rotation completed: z_rot {0}'.format(self.zrot))
-        self.get_logger().info('Returning response: last_angle {0} elapsed_time {1}'.format(response['last_angle'], duration))
-        return response
+        self.get_logger().info('Returning response: last_angle {0} elapsed_time {1}'.format(self.response['last_angle'], duration))
+        return self.response
         
     def publish_result(self):
         self.duration = 0

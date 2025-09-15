@@ -21,7 +21,7 @@ class RotateZAxisRelativeService(RotateZAxis):
         if 'last_angle' in result:
             response.last_angle = result['last_angle']
         if 'at_end' in result:
-            response.atend = result['atend']
+            response.at_end = result['at_end']
         if 'elapsed_time' in result:
             response.elapsed_time = result['elapsed_time']
         response.success = result['success']

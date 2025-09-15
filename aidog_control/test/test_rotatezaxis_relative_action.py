@@ -1,8 +1,8 @@
-
 import unittest
 import pytest
 import rclpy
-from aidog_interfaces.srv import RotateZAxisRelative
+from aidog_interfaces.action import RotateZAxisRelative
+from rclpy.action import ActionClient
 from aidog_control.clock_server import ClockServer
 from geometry_msgs.msg import Twist
 import launch
@@ -14,83 +14,99 @@ from rclpy.executors import MultiThreadedExecutor
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description():
-    launch_service = launch_ros.actions.Node(
-            executable='aidog_rotatezaxis_relative_service',
+    launch_action = launch_ros.actions.Node(
+            executable='aidog_rotatezaxis_relative_action',
             package='aidog_control',
             output='screen'
         )
-    service_under_test = launch.actions.ExecuteProcess(
-        cmd=[
-            "ros2",
-            "run",
-            "aidog_control",
-            'aidog_rotatezaxis_relative_service',
-            ],
-        output='screen'
-    )
-    wait_for_service = launch.actions.TimerAction(
+
+    wait_for_launch = launch.actions.TimerAction(
         period=2.0,
         actions=[launch_testing.actions.ReadyToTest()]
     )
     launch_desc = launch.LaunchDescription(
             [
-                launch_service,
-                wait_for_service,
+                launch_action,
+                wait_for_launch,
             ]
         )
     return launch_desc
    
     
-class TestRotateZAxisRelativeService(unittest.TestCase):
+class TestRotateZAxisRelativeAction(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Initialize the ROS context for the test node
         rclpy.init()
-        self.executor = MultiThreadedExecutor()
-        self.callback_group = rclpy.callback_groups.ReentrantCallbackGroup()
         self.deg2rad = (3.14159 / 180)
         self.rad2deg = (180 / 3.14159)
         
     @classmethod
     def tearDownClass(self):
         # Shutdown the ROS context
-        self.executor.shutdown()
         rclpy.shutdown()
                 
     def setUp(self):
-        self.node = rclpy.create_node('test_rotatezaxis_relative_service')
-        self.executor.add_node(self.node)
+        self.node = rclpy.create_node('test_rotatezaxis_relative_action')
         self.clock = ClockServer(self.node)
                 
     def tearDown(self):
         self.clock.stop()
-        self.executor.remove_node(self.node)
         self.node.destroy_node()
     
     def create_client(self):
-        """Create service client"""
+        """Create action client"""
         self.node.get_logger().info('Creating client')
-        return self.node.create_client(RotateZAxisRelative, 'aidog_rotatezaxis_relative')
+        return ActionClient(self.node, RotateZAxisRelative, 'aidog_rotatezaxis_relative_action_server')
     
-    def waitForService(self, client, timeout_sec=60.0):
+    def waitForService(self, client, timeout_sec=2.0):
         """Wait for service to be available"""
-        self.node.get_logger().info('Waiting for service to be available')
-        ready = client.wait_for_service(timeout_sec=timeout_sec)
+        self.node.get_logger().info('Waiting for server to be available')
+        ready = client.wait_for_server(timeout_sec=timeout_sec)
         if not ready:
-            raise RuntimeError('Wait for service timed out')
-        self.node.get_logger().info('Service is available')
+            raise RuntimeError('Wait for server timed out')
+        self.node.get_logger().info('Server is available')
 
-    def sendRequest(self, client, request):
-        """Send request and wait for response"""
-        self.node.get_logger().info('Sending request to service')
-        future = client.call_async(request)
-        self.assertIsNotNone(future)
-        self.executor.spin_until_future_complete(future)
-        if future.result() is not None:
-            self.node.get_logger().info(future.result().message)
+    def sendRequest(self, client, goal_msg):
+        self.node.get_logger().info('Sending goal with turn_angle: {0}, start_angle: {1}, angular_velocity: {2} end_angle: {3}'.format(
+            goal_msg.turn_angle, goal_msg.start_angle, goal_msg.angular_velocity, goal_msg.end_angle))
+        self._send_goal_future = client.send_goal_async(
+            goal_msg,
+            feedback_callback=self.feedback_callback)
+        self._send_goal_future.add_done_callback(self.goal_response_callback)
+        self.assertIsNotNone(self._send_goal_future)
+        return self.waitForResult(self._send_goal_future)
+        
+    def waitForResult(self, send_goal_future):
+        rclpy.spin_until_future_complete(self.node, send_goal_future)
+        goal_handle = send_goal_future.result()
+        if goal_handle.accepted:
+            self.get_result_future = goal_handle.get_result_async()
+            self.get_result_future.add_done_callback(self.get_result_callback)
+        if self.get_result_future is not None:
+            rclpy.spin_until_future_complete(self.node, self.get_result_future)
+            result = self.get_result_future.result().result
+            self.node.get_logger().info('Result {0}'.format(result));
+            self.node.get_logger().info(result.message)
+            return result
         else:
-            self.node.get_logger().error('Service call failed.')
-        return future.result()
+            self.node.get_logger().error('Action call failed.')
+        return None
+
+    def goal_response_callback(self, future):
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.node.get_logger().info('Goal rejected :(')
+        else:
+            self.node.get_logger().info('Goal accepted :)')
+
+    def get_result_callback(self, future):
+        result = future.result().result
+        self.node.get_logger().info('Result: message = {0}'.format(result.message))
+
+    def feedback_callback(self, feedback_msg):
+        feedback = feedback_msg.feedback
+        #self.node.get_logger().info('Received feedback: current_angle {0} current_time {1}'.format(feedback.current_angle, feedback.current_time))
             
     def test_rotate30(self):
         """Test 30 degree rotation"""
@@ -102,12 +118,12 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
         self.node.get_logger().info('Subscribing to cmd_vel topic')
 
         try:
-            self.waitForService(client)        
-            request = RotateZAxisRelative.Request()
+            self.waitForService(client)
+            request = RotateZAxisRelative.Goal()      
             request.turn_angle = 30.0 * self.deg2rad
-            request.current_angle = 0.0
             request.angular_velocity = 10.0 * self.deg2rad
             request.end_angle = 180.0 * self.deg2rad
+            request.start_angle = 0.0
             duration = abs(request.turn_angle / request.angular_velocity)
 
             response = self.sendRequest(client, request)
@@ -132,9 +148,9 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
 
         try:
             self.waitForService(client)        
-            request = RotateZAxisRelative.Request()
+            request = RotateZAxisRelative.Goal()
             request.turn_angle = -30.0 * self.deg2rad
-            request.current_angle = 0.0
+            request.start_angle = 0.0
             request.angular_velocity = 10.0 * self.deg2rad
             request.end_angle = -180.0 * self.deg2rad
             duration = abs(request.turn_angle / request.angular_velocity)
@@ -161,9 +177,9 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
 
         try:
             self.waitForService(client)        
-            request = RotateZAxisRelative.Request()
+            request = RotateZAxisRelative.Goal()
             request.turn_angle = -30.0 * self.deg2rad
-            request.current_angle = 0.0
+            request.start_angle = 0.0
             request.angular_velocity = 10.0 * self.deg2rad
             request.end_angle = 180.0 * self.deg2rad
 
@@ -186,12 +202,11 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
       
         try:
             self.waitForService(client)        
-            request = RotateZAxisRelative.Request()
+            request = RotateZAxisRelative.Goal()
             request.turn_angle = -30.0 * self.deg2rad
-            request.current_angle = -60.0 * self.deg2rad
+            request.start_angle = -60.0 * self.deg2rad
             request.angular_velocity = 10.0 * self.deg2rad
             request.end_angle = -70.0 * self.deg2rad
-            duration = abs(request.turn_angle / request.angular_velocity)
 
             response = self.sendRequest(client, request)
             self.assertIsNotNone(response)
