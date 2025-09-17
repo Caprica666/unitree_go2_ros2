@@ -9,7 +9,7 @@ from rclpy.executors import MultiThreadedExecutor
    
 class RotateZAxisRelativeService(RotateZAxisWebService):
     def __init__(self):
-        super().__init__('aidog_rotatezaxis_relative_service')
+        super().__init__('aidog_rotatezaxis_relative_service', absolute=False)
         self.get_srv = self.create_service(HTTP,
                                        'http/get/aidog_rotatezaxis_relative',
                                        self.process_get_request,
@@ -29,7 +29,7 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        aidog_rotatezaxis_relative_service.rotatezaxis_relative(0.0)  # Ensure to stop the robot
+        #aidog_rotatezaxis_relative_service.rotatezaxis_relative(0.0)  # Ensure to stop the robot
         executor.remove_node(aidog_rotatezaxis_relative_service)
         aidog_rotatezaxis_relative_service.destroy_node()
         executor.shutdown()

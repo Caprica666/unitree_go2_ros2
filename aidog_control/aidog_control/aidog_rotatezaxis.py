@@ -9,9 +9,7 @@ import numpy as np
 import quaternion
 import rclpy
 from rclpy.node import Node
-from rclpy.time import Time
 
-from tf2_ros.transform_listener import TransformListener
     
 class RotateZAxis(Node):
     def quaternion_angle(self, q0, q1):
@@ -110,6 +108,7 @@ class RotateZAxis(Node):
         dt = t - self.starting_time
         #self.get_logger().info(f'elapsed time: {dt}')
         if dt >= self.duration:
+            self.duration = 0
             self.publish_result()
 
     def rotatezaxis_relative(self, angular_velocity):
@@ -184,7 +183,6 @@ class RotateZAxis(Node):
         return self.response
         
     def publish_result(self):
-        self.duration = 0
         self.rotatezaxis_relative(0.0)  # Stop the robot after rotation
         self.get_logger().info('Stopping rotation')
         self.finish_event.set()

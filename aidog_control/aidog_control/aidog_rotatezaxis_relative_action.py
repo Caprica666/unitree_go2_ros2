@@ -26,23 +26,20 @@ class RotateZAxisRelativeAction(RotateZAxis):
             cancel_callback=self.cancel_callback)
         self.result = RotateZAxisRelative.Result()
         self.response = None
-        self.feedback_msg = RotateZAxisRelative.Feedback()
-        self.feedback_timer = self.create_timer(0.2, self.publish_feedback, autostart=False)
+        self.feedback_msg = RotateZAxisRelative.Feedback()  
+        self.feedback_timer = None
         
     def execute_callback(self, goal_handle):
         self.get_logger().info('Executing goal...')
         self.goal = goal_handle.request
         self.goal_handle = goal_handle
-        angular_velocity = self.goal.angular_velocity
         self.current_angle = self.goal.start_angle
         self.elapsed = 0.0
         self.result.success = False
         self.result.at_end = False
-        self.duration = abs(goal_handle.request.turn_angle) / angular_velocity
-        self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(self.goal.turn_angle, self.duration))
-        self.feedback_msg = RotateZAxisRelative.Feedback()     
-        self.feedback_timer.reset()
-
+        self.duration = 0.0
+        
+        self.feedback_timer = self.create_timer(0.2, self.publish_feedback, autostart=True)
         response = self.handle_rotatezaxis(self.goal.turn_angle, self.goal.angular_velocity, self.goal.start_angle, self.goal.end_angle)
         self.result.message = response['message']
         if not response['success']:
@@ -52,6 +49,9 @@ class RotateZAxisRelativeAction(RotateZAxis):
     
     def publish_feedback(self):
         dt = self.feedback_timer.timer_period_ns / 1e9  # Convert nanoseconds to seconds
+        if dt == 0 or self.duration == 0:
+            self.feedback_timer = None
+            return
         self.elapsed += dt
         self.current_angle += (self.goal.turn_angle * dt) / self.duration  
         if self.goal_handle.is_cancel_requested:
@@ -67,17 +67,24 @@ class RotateZAxisRelativeAction(RotateZAxis):
             self.feedback_timer.cancel()
         if self.response is not None:
             self.result.success = self.response['success']
-            self.result.last_angle = self.response['last_angle']
-            self.result.elapsed_time = self.response['elapsed_time']
-            self.result.at_end = self.response['at_end']
             self.result.message = self.response['message']
+            if 'last_angle' in self.response:
+                self.result.last_angle = self.response['last_angle']
+            if 'elapsed_time' in self.response:
+                self.result.elapsed_time = self.response['elapsed_time']
+            if 'at_end' in self.response:
+                self.result.at_end = self.response['at_end']
+            self.get_logger().info('publish_result: {0}'.format(self.result))
+        else:
+            self.get_logger().info('publish_result: response is None')
         super().publish_result()
         self.goal_handle.succeed()
                
     def cancel_callback(self, goal_handle):
+        self.duration = 0.0
         if self.feedback_timer is not None:
             self.feedback_timer.cancel()
-        self.get_logger().info('Goal canceled')
+            self.feedback_timer = None
         self.result.success = False
         if self.result.message is None:
             self.result.message = 'error: Rotation canceled'

@@ -3,41 +3,44 @@ import unittest
 import pytest
 import rclpy
 from aidog_interfaces.srv import RotateZAxisRelative
-from aidog_control.clock_server import ClockServer
 from geometry_msgs.msg import Twist
 import launch
 import launch_ros.actions
 import launch_testing.actions
 import launch_testing.markers
+from launch.conditions import IfCondition
+
 from rclpy.executors import MultiThreadedExecutor
 
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description():
+    mock_clock_arg = launch.actions.DeclareLaunchArgument(
+            'mock_clock',
+            default_value='true',
+            description='Launch mock clock server'
+        )
     launch_service = launch_ros.actions.Node(
             executable='aidog_rotatezaxis_relative_service',
             package='aidog_control',
             output='screen'
         )
-    service_under_test = launch.actions.ExecuteProcess(
-        cmd=[
-            "ros2",
-            "run",
-            "aidog_control",
-            'aidog_rotatezaxis_relative_service',
-            ],
-        output='screen'
+    start_clock = launch_ros.actions.Node(
+        executable='clock_server',
+        package='aidog_control',
+        output='screen',
+        condition=IfCondition(launch.substitutions.LaunchConfiguration('mock_clock'))
     )
     wait_for_service = launch.actions.TimerAction(
         period=2.0,
         actions=[launch_testing.actions.ReadyToTest()]
     )
-    launch_desc = launch.LaunchDescription(
-            [
-                launch_service,
-                wait_for_service,
-            ]
-        )
+    launch_desc = launch.LaunchDescription( [
+        mock_clock_arg,
+        start_clock,
+        launch_service,
+        wait_for_service,
+    ] )
     return launch_desc
    
     
@@ -60,10 +63,8 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
     def setUp(self):
         self.node = rclpy.create_node('test_rotatezaxis_relative_service')
         self.executor.add_node(self.node)
-        self.clock = ClockServer(self.node)
-                
+                 
     def tearDown(self):
-        self.clock.stop()
         self.executor.remove_node(self.node)
         self.node.destroy_node()
     
@@ -115,7 +116,7 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
             self.assertTrue(response.success)
             self.assertFalse(response.at_end)
             self.assertEqual(round(response.last_angle * self.rad2deg), 30)
-            self.assertEqual(response.elapsed_time, duration)
+            self.assertEqual(round(response.elapsed_time), duration)
             self.assertGreater(len(msgs_rx), 1)
         finally:
             self.node.destroy_client(client)
@@ -144,7 +145,7 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
             self.assertTrue(response.success)
             self.assertFalse(response.at_end)
             self.assertEqual(round(response.last_angle * self.rad2deg), -30)
-            self.assertEqual(response.elapsed_time, duration)
+            self.assertEqual(round(response.elapsed_time), duration)
             self.assertGreater(len(msgs_rx), 1)
         finally:
             self.node.destroy_client(client)
@@ -191,13 +192,13 @@ class TestRotateZAxisRelativeService(unittest.TestCase):
             request.current_angle = -60.0 * self.deg2rad
             request.angular_velocity = 10.0 * self.deg2rad
             request.end_angle = -70.0 * self.deg2rad
-            duration = abs(request.turn_angle / request.angular_velocity)
 
             response = self.sendRequest(client, request)
             self.assertIsNotNone(response)
             self.assertTrue(response.success)
             self.assertTrue(response.at_end)
             self.assertEqual(round(response.last_angle * self.rad2deg), -70)
+            self.assertEqual(round(response.elapsed_time), 1)        
             self.assertIn('robot at end angle', response.message)
         finally:
             self.node.destroy_client(client)
