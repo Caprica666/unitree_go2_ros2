@@ -38,6 +38,7 @@ setup(
             'aidog_web_rotatezaxis_relative = aidog_control.aidog_web_rotatezaxis_relative_service:main',
             'aidog_web_rotatezaxis_absolute = aidog_control.aidog_web_rotatezaxis_absolute_service:main',
             'clock_server = aidog_control.clock_server:main',
+            'mock_odom_server = aidog_control.mock_odom_server:main',
         ],
     },
 )

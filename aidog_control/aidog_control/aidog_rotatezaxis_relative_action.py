@@ -68,10 +68,9 @@ class RotateZAxisRelativeAction(RotateZAxis):
         if self.response is not None:
             self.result.success = self.response['success']
             self.result.message = self.response['message']
+            self.result.elapsed_time = self.elapsed
             if 'last_angle' in self.response:
                 self.result.last_angle = self.response['last_angle']
-            if 'elapsed_time' in self.response:
-                self.result.elapsed_time = self.response['elapsed_time']
             if 'at_end' in self.response:
                 self.result.at_end = self.response['at_end']
             self.get_logger().info('publish_result: {0}'.format(self.result))

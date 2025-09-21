@@ -5,12 +5,14 @@ from ros2web_interfaces.srv import HTTP
 from ros2web_interfaces.msg import ContentType, BodyPart
 from aidog_control.aidog_rotatezaxis import RotateZAxis
 import json
+import numpy as  np
 import urllib.parse
    
 class RotateZAxisWebService(RotateZAxis):
     def __init__(self, name, absolute=False):
         super().__init__(name, absolute=absolute)
-        self.rad2deg = 180.0 / 3.14159
+        self.rad2deg = 180.0 / np.pi
+        self.deg2rad = np.pi / 180.0
     
     def make_response(self, jsonresponse, httpresponse):
         if jsonresponse['success'] is False:
