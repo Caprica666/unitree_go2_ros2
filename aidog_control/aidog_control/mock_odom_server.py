@@ -51,7 +51,7 @@ class MockOdomServer(Node):
         self.pub.publish(self.odom)
         
     def velocity_callback(self, msg):
-        self.get_logger().info(f'Velocity command received: angular.z={msg.angular.z}')
+        self.get_logger().info('Velocity command received: angular.z {:.2f}'.format(msg.angular.z))
         if (abs(msg.angular.z) + abs(msg.linear.x) + abs(msg.linear.y)) > 1e-6:
             self.twist = msg
         else:

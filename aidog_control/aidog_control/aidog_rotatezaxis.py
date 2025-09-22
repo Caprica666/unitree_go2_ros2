@@ -30,7 +30,7 @@ class RotateZAxis(Node):
     def __init__(self, name, absolute=False):
         super().__init__(name)
         self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, True)])
-        self.velocity_publisher = self.create_publisher(Twist, 'cmd_vel', 1)
+        self.velocity_publisher = self.create_publisher(Twist, '/cmd_vel', 1)
         self.get_logger().info('Started RotateZAxis')
         self.callback_group = rclpy.callback_groups.ReentrantCallbackGroup()
         self.twist = Twist()
@@ -92,7 +92,7 @@ class RotateZAxis(Node):
         dt = t - self.starting_time
         assert(np.allclose(axis, [0, 0, 1], atol=1e-3) or np.allclose(axis, [0, 0, -1], atol=1e-3)), f"Rotation axis is not Z: {axis}"
         #if abs(prev_zrot - self.zrot) > 0.001:  # Only log if significant change
-            #self.get_logger().info(f'aidog: axis={axis}, angle={angle} time: {dt}')
+        #    self.get_logger().info(f'aidog: axis={axis}, angle={angle} time: {dt}')
         if abs(self.last_angle - angle) < 1e-3:
             self.duration = 0
             self.publish_result()
@@ -112,7 +112,7 @@ class RotateZAxis(Node):
     def rotatezaxis_relative(self, angular_velocity):
         self.twist.angular.z = angular_velocity
         self.velocity_publisher.publish(self.twist)
-        self.get_logger().info(f'Z angular velocity: {angular_velocity}')    
+        self.get_logger().info('Z angular velocity: {:.2f}'.format(angular_velocity)) 
           
     def handle_rotatezaxis(self, turn_angle, angular_velocity, start_angle, end_angle):
         self.response = { }
@@ -135,7 +135,7 @@ class RotateZAxis(Node):
         if 'error' in self.response['message']:
             return self.response
         self.response['elapsed_time'] = self.current_time - self.starting_time     
-        self.response['message'] += ' last_angle {0} elapsed_time {1}'.format(self.response['last_angle'], self.response['elapsed_time'])
+        self.response['message'] += ' last_angle {:.2f} elapsed_time {:.2f}'.format(self.response['last_angle'], self.response['elapsed_time'])
         self.get_logger().info('Returning response: ' + self.response['message'])
         return self.response
     
@@ -183,19 +183,30 @@ class RotateZAxis(Node):
             self.finish_event.clear()
     
     def handle_rotate_absolute(self, turn_angle, angular_velocity):
-        self.get_logger().info('Requesting rotation: turn_angle {0} angular_velocity {1}'.format(turn_angle, angular_velocity))
-        duration = abs(turn_angle / angular_velocity)        
-        self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(turn_angle, duration))
+        self.last_angle = turn_angle
+        amount_to_turn = self.zrot - turn_angle
+        flip_last_angle = False
+        if (angular_velocity < 0) and (turn_angle > self.zrot):  # turn through 0:
+            self.last_angle = 2 * np.pi - turn_angle
+            flip_last_angle = True
+            amount_to_turn = self.zrot + self.last_angle
+        if (angular_velocity > 0) and (turn_angle < self.zrot):  # turn through 0:
+            amount_to_turn = (2 * np.pi - self.zrot) + turn_angle                     
+        duration = abs(amount_to_turn / angular_velocity)       
+        self.get_logger().info('Starting rotation: turn_angle {:.2f} angular_velocity {:.2f} duration {:.2f} last_angle {:2f}'.format(turn_angle, angular_velocity, duration, self.last_angle))
 
         self.response['success'] = True
         self.starting_time = self.current_time
-        self.last_angle = turn_angle
-        if turn_angle != 0:
+
+        if not np.isclose(turn_angle, self.zrot, atol=1e-3):
             self.rotatezaxis_relative(angular_velocity)
             self.duration = duration
             self.finish_event.wait()
-            self.finish_event.clear()
-        self.response['last_angle'] = self.zrot
+            self.finish_event.clear()       
+        if flip_last_angle:
+            self.response['last_angle'] = 2 * np.pi - self.zrot
+        else:
+            self.response['last_angle'] = self.zrot                      
         
     def publish_result(self):
         self.rotatezaxis_relative(0.0)  # Stop the robot after rotation

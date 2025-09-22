@@ -70,7 +70,7 @@ class RotateZAxisWebService(RotateZAxis):
         query = dict(urllib.parse.parse_qsl(request.query))
         turn_angle = float(query.get('turn_angle', 30))
         angular_velocity = float(query.get('angular_velocity', 5))
-        self.get_logger().info('/get: turn_angle {0} angular_velocity'.format(turn_angle, angular_velocity))
+        self.get_logger().info('/get: turn_angle {:.2f} angular_velocity'.format(turn_angle, angular_velocity))
         turn_angle *= self.deg2rad
         angular_velocity *= self.deg2rad
         if self.absolute:

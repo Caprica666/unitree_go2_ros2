@@ -29,7 +29,7 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        aidog_rotatezaxis_absolute_service.rotatezaxis_relative(0.0)  # Ensure to stop the robot
+        #aidog_rotatezaxis_absolute_service.rotatezaxis_relative(0.0)  # Ensure to stop the robot
         executor.remove_node(aidog_rotatezaxis_absolute_service)
         aidog_rotatezaxis_absolute_service.destroy_node()
         executor.shutdown()
