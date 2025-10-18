@@ -1,0 +1,235 @@
+import os
+
+import launch_ros
+from ament_index_python.packages import get_package_share_directory
+from launch_ros.actions import Node
+
+from launch import LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    TimerAction,
+)
+
+from launch.substitutions import Command, LaunchConfiguration
+
+
+def generate_launch_description():
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    base_frame = "base_link"
+
+    unitree_go2_sim = launch_ros.substitutions.FindPackageShare(
+        package="unitree_go2_sim").find("unitree_go2_sim")
+    unitree_go2_description = launch_ros.substitutions.FindPackageShare(
+        package="unitree_go2_description").find("unitree_go2_description")
+    
+    joints_config = os.path.join(unitree_go2_sim, "config/joints/joints.yaml")
+    ros_control_config = os.path.join(
+        unitree_go2_sim, "config/ros_control/ros_control.yaml"
+    )
+    gait_config = os.path.join(unitree_go2_sim, "config/gait/gait.yaml")
+    links_config = os.path.join(unitree_go2_sim, "config/links/links.yaml")
+    #default_model_path = os.path.join(unitree_go2_description, "urdf/unitree_go2_robot.xacro")
+    default_model_path = os.path.join(unitree_go2_description, "urdf/temp_robot2.urdf")
+
+
+    declare_use_sim_time = DeclareLaunchArgument(
+        "use_sim_time",
+        default_value="true",
+        description="Use simulation (Gazebo) clock if true",
+    )
+
+    declare_robot_name = DeclareLaunchArgument(
+        "robot_name", default_value="go2", description="Robot name"
+    )
+    declare_lite = DeclareLaunchArgument(
+        "lite", default_value="false", description="Lite"
+    )
+    declare_ros_control_file = DeclareLaunchArgument(
+        "ros_control_file",
+        default_value=ros_control_config,
+        description="Ros control config path",
+    )
+
+    declare_gui = DeclareLaunchArgument(
+        "gui", default_value="true", description="Use gui"
+    )
+    declare_world_init_x = DeclareLaunchArgument("world_init_x", default_value="0.0")
+    declare_world_init_y = DeclareLaunchArgument("world_init_y", default_value="0.0")
+    declare_world_init_z = DeclareLaunchArgument("world_init_z", default_value="0.375")
+    declare_world_init_heading = DeclareLaunchArgument(
+        "world_init_heading", default_value="0.0"
+    )
+    declare_description_path = DeclareLaunchArgument(
+        "unitree_go2_description_path",
+        default_value=default_model_path,
+        description="Path to the robot description xacro file",
+    )
+    
+    # Description nodes and parameters
+    robot_description = {"robot_description": Command(["xacro ", LaunchConfiguration("unitree_go2_description_path")])}
+    
+    robot_state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        output="screen",
+        parameters=[
+            robot_description,
+            {"use_sim_time": use_sim_time}
+        ],
+    )
+    
+    # CHAMP controller nodes
+    quadruped_controller_node = Node(
+        package="champ_base",
+        executable="quadruped_controller_node",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            {"gazebo": False},
+            {"publish_joint_states": False},
+            {"publish_joint_control": True},
+            {"publish_foot_contacts": True},
+            {"joint_controller_topic": "joint_group_effort_controller/joint_trajectory"},
+            {"urdf": Command(['xacro ', LaunchConfiguration('unitree_go2_description_path')])},
+            joints_config,
+            links_config,
+            gait_config,
+            {"hardware_connected": False},
+            {"close_loop_odom": True},
+        ],
+        remappings=[("/cmd_vel/smooth", "/cmd_vel")],
+    )
+
+    state_estimator_node = Node(
+        package="champ_base",
+        executable="state_estimation_node",
+        output="screen",
+        parameters=[
+            {"use_sim_time": use_sim_time},
+            {"orientation_from_imu": True},
+            {"urdf": Command(['xacro ', LaunchConfiguration('unitree_go2_description_path')])},
+            joints_config,
+            links_config,
+            gait_config,
+        ],
+    )
+
+    base_to_footprint_ekf = Node(
+        package="robot_localization",
+        executable="ekf_node",
+        name="base_to_footprint_ekf",
+        output="screen",
+        parameters=[
+            {"base_link_frame": base_frame},
+            {"use_sim_time": use_sim_time},
+            os.path.join(
+                get_package_share_directory("champ_base"),
+                "config",
+                "ekf",
+                "base_to_footprint.yaml",
+            ),
+        ],
+        remappings=[("odometry/filtered", "odom/local")],
+    )
+
+    footprint_to_odom_ekf = Node(
+        package="robot_localization",
+        executable="ekf_node",
+        name="footprint_to_odom_ekf",
+        output="screen",
+        parameters=[
+            {"base_link_frame": base_frame},
+            {"use_sim_time": use_sim_time},
+            os.path.join(
+                get_package_share_directory("champ_base"),
+                "config",
+                "ekf",
+                "footprint_to_odom.yaml",
+            ),
+        ],
+        remappings=[("odometry/filtered", "odom")],
+    )
+
+    rviz2 = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', os.path.join(unitree_go2_sim, "rviz/rviz.rviz")],
+        # parameters=[{"use_sim_time": use_sim_time}]
+    )
+    
+    # Use spawner nodes directly to handle the configuration step. (load → configure → activate)
+    controller_spawner_js = TimerAction(
+        period=15.0,  # Wait for Gazebo to fully initialize
+        actions=[
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                output="screen",
+                arguments=[
+                    "--controller-manager-timeout", "60",  # Longer timeout
+                    "joint_states_controller",  # No --inactive flag to ensure full activation
+                ],
+                parameters=[{"use_sim_time": use_sim_time}],
+            )
+        ]
+    )
+
+    controller_spawner_effort = TimerAction(
+        period=20.0,  # Wait 5 seconds after joint_states_controller
+        actions=[
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                output="screen",
+                arguments=[
+                    "--controller-manager-timeout", "60",  # Longer timeout
+                    "joint_group_effort_controller",  # No --inactive flag to ensure full activation
+                ],
+                parameters=[{"use_sim_time": use_sim_time}],
+            )
+        ]
+    )
+    
+    # Shell script to manually check controller status 
+    controller_status_check = TimerAction(
+        period=25.0,  # Check status after controllers should be loaded
+        actions=[
+            ExecuteProcess(
+                cmd=["bash", "-c", "echo 'Checking controller status:' && ros2 control list_controllers"],
+                output='screen',
+            )
+        ]
+    )
+    
+    return LaunchDescription(
+        [
+            # Launch arguments
+            declare_use_sim_time,
+            declare_robot_name,
+            declare_lite,
+            declare_ros_control_file,
+            declare_gui,
+            declare_world_init_x,
+            declare_world_init_y,
+            declare_world_init_z,
+            declare_world_init_heading,
+            declare_description_path, 
+            
+            # robot nodes first
+            robot_state_publisher_node,
+            
+            # CHAMP controller nodes
+            quadruped_controller_node,
+            state_estimator_node,
+            
+            # Controller spawners that handle the complete lifecycle
+            controller_spawner_js,
+            controller_spawner_effort,
+            controller_status_check,
+            
+            # Visualization (only if rviz flag is set)
+            rviz2,
+        ]
+    )
