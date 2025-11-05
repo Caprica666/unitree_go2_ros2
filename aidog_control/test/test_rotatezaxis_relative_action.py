@@ -119,8 +119,8 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
         feedback = feedback_msg.feedback
         #self.node.get_logger().info('Received feedback: current_angle {0} current_time {1}'.format(feedback.current_angle, feedback.current_time))
             
-    def test_rotate30(self):
-        """Test 30 degree rotation"""
+    def test_rotate30_clockwise(self):
+        """Test 30 degree rotation clockwise"""
         msgs_rx = []
         client = self.create_client()
         sub = self.node.create_subscription(
@@ -148,8 +148,8 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
             self.node.destroy_client(client)
             self.node.destroy_subscription(sub)
     
-    def test_rotateneg30(self):
-        """Test -30 degree rotation"""
+    def test_rotate30_counterclockwise(self):
+        """Test 30 degree rotation counterclockwise"""
         msgs_rx = []
         client = self.create_client()
         sub = self.node.create_subscription(
@@ -160,17 +160,17 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
         try:
             self.waitForService(client)        
             request = RotateZAxisRelative.Goal()
-            request.turn_angle = -30.0 * self.deg2rad
+            request.turn_angle = 30.0 * self.deg2rad
             request.start_angle = 0.0
-            request.angular_velocity = 10.0 * self.deg2rad
-            request.end_angle = -180.0 * self.deg2rad
+            request.angular_velocity = -10.0 * self.deg2rad
+            request.end_angle = 180.0 * self.deg2rad
             duration = abs(request.turn_angle / request.angular_velocity)
 
             response = self.sendRequest(client, request)
             self.assertIsNotNone(response)
             self.assertTrue(response.success)
             self.assertFalse(response.at_end)
-            self.assertEqual(round(response.last_angle * self.rad2deg), -30)
+            self.assertEqual(round(response.last_angle * self.rad2deg), 330)
             self.assertEqual(round(response.elapsed_time), duration)
             self.assertGreater(len(msgs_rx), 1)
         finally:
@@ -178,7 +178,7 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
             self.node.destroy_subscription(sub)
             
     def test_rotateneg30fail(self):
-        """Test -30 degree rotation with incorrect end_angle"""
+        """Test 30 degree rotation with incorrect end_angle"""
         msgs_rx = []
         client = self.create_client()
         sub = self.node.create_subscription(
@@ -189,10 +189,10 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
         try:
             self.waitForService(client)        
             request = RotateZAxisRelative.Goal()
-            request.turn_angle = -30.0 * self.deg2rad
+            request.turn_angle = 30.0 * self.deg2rad
             request.start_angle = 0.0
             request.angular_velocity = 10.0 * self.deg2rad
-            request.end_angle = 180.0 * self.deg2rad
+            request.end_angle = -180.0 * self.deg2rad
 
             response = self.sendRequest(client, request)
             self.assertIsNotNone(response)
@@ -202,8 +202,8 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
             self.node.destroy_client(client)
             self.node.destroy_subscription(sub)
             
-    def test_turn_robot_camera_end_angle_neg(self):
-        """Test -30 degree rotation with correct end_angle"""
+    def test_rotate30_atend(self):
+        """Test 30 degree rotation with correct end_angle"""
         msgs_rx = []
         client = self.create_client()
         sub = self.node.create_subscription(
@@ -214,17 +214,16 @@ class TestRotateZAxisRelativeAction(unittest.TestCase):
         try:
             self.waitForService(client)        
             request = RotateZAxisRelative.Goal()
-            request.turn_angle = -30.0 * self.deg2rad
-            request.start_angle = -60.0 * self.deg2rad
+            request.turn_angle = 30.0 * self.deg2rad
+            request.start_angle = 60.0 * self.deg2rad
             request.angular_velocity = 10.0 * self.deg2rad
-            request.end_angle = -70.0 * self.deg2rad
-
+            request.end_angle = 70.0 * self.deg2rad
             
             response = self.sendRequest(client, request)
             self.assertIsNotNone(response)
             self.assertTrue(response.success)
             self.assertTrue(response.at_end)
-            self.assertEqual(round(response.last_angle * self.rad2deg), -70)
+            self.assertEqual(round(response.last_angle * self.rad2deg), 70)
             self.assertEqual(round(response.elapsed_time), 1)
             self.assertIn('robot at end angle', response.message)
         finally:

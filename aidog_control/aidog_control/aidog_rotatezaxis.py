@@ -32,7 +32,6 @@ class RotateZAxis(Node):
         self.set_parameters([rclpy.parameter.Parameter("use_sim_time", rclpy.Parameter.Type.BOOL, True)])
         self.velocity_publisher = self.create_publisher(Twist, '/cmd_vel', 1)
         self.get_logger().info('Started RotateZAxis')
-        self.callback_group = rclpy.callback_groups.ReentrantCallbackGroup()
         self.twist = Twist()
         self.twist.linear.x = 0.0
         self.twist.linear.y = 0.0
@@ -42,21 +41,17 @@ class RotateZAxis(Node):
         self.twist.angular.z = 0.0
         self.rad2deg = 180.0 / np.pi
         self.absolute = absolute
-
+        self.current_time = 0.0
+        self.starting_time = 0.0
         self.duration = 0.0
         self.zrot = 0.0
         self.finish_event = Event()
         self.finish_event.clear()
-        if absolute:
-            self.starting_time = None
-            self.pose_subscriber = self.create_subscription(Odometry, '/odom/raw',
-                                                            self.pose_callback, 1,
-                                                            callback_group=self.callback_group)
-        else:
-            self.starting_time = self.get_time()
-            self.clock_subscriber = self.create_subscription(Clock, '/clock',
-                                                            self.clock_callback, 1,
-                                                            callback_group=self.callback_group)
+        self.first_angle = None
+        self.pose_subscriber = self.create_subscription(Odometry, '/odom/raw',
+                                                        self.pose_callback, 1)
+        self.get_logger().info('Subscribing to /odom/raw')
+            
     def stop(self):
         self.get_logger().info('Stopping RotateZAxis node')
         if self.velocity_publisher is not None:
@@ -70,43 +65,50 @@ class RotateZAxis(Node):
         seconds, nanos = t.seconds_nanoseconds()
         seconds += float(nanos) * 1e-9  # Convert nanoseconds to seconds
         return seconds
+    
+    def positive_angle(self, angle):
+        if angle < 0:
+            angle += 2 * np.pi
+        return np.fmod(angle, 2 * np.pi)
         
+    def positive_angle_deg(self, angle):
+        if angle < 0:
+            angle += 360.0
+        return np.fmod(angle, 360.0)
+    
     def pose_callback(self, msg):
-        t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        if self.starting_time == None:
-            self.starting_time = t
-        self.current_time = t
-        if self.duration == 0:
-            return
+        self.current_time = t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 
         ros_quat = msg.pose.pose.orientation
         q = Quaternion(ros_quat.w, ros_quat.x, ros_quat.y, ros_quat.z)
         q = q.normalised
         axis = q.axis
+        orig_angle = q.angle
         angle = q.angle
         prev_zrot = self.zrot
-        self.zrot = angle
-
-        #rx *= self.rad2deg  # Convert radians to degrees
-        #ry *= self.rad2deg
-        rz = angle * self.rad2deg
-        dt = t - self.starting_time
-        assert(np.allclose(axis, [0, 0, 1], atol=1e-3) or np.allclose(axis, [0, 0, -1], atol=1e-3)), f"Rotation axis is not Z: {axis}"
-        #if abs(prev_zrot - self.zrot) > 0.001:  # Only log if significant change
-        #    self.get_logger().info(f'aidog: axis={axis}, angle={angle} time: {dt}')
-        if abs(self.last_angle - angle) < 1e-3:
-            self.duration = 0
-            self.publish_result()
-                
-    def clock_callback(self, msg):
-        t = msg.clock
-        t = msg.clock.sec + msg.clock.nanosec * 1e-9
-        self.current_time = t
+        zaxis = np.allclose(axis, [0, 0, 1], atol=1e-3)
+        negzaxis = np.allclose(axis, [0, 0, -1], atol=1e-3)
+        if axis[2] < 0:      # rotate about -Z axis?
+            angle = -angle
+        self.zrot = angle = self.positive_angle(angle)
         if self.duration == 0:
             return
-        dt = t - self.starting_time
-        #self.get_logger().info(f'elapsed time: {dt}')
-        if dt >= self.duration:
+        dt = t - self.starting_time 
+        s = 'axis={0}'.format(axis)
+        angle_deg = angle * self.rad2deg
+        last_angle_deg = self.last_angle * self.rad2deg
+        s += ', angle={:.2f}'.format(orig_angle * self.rad2deg)         
+        if not zaxis and not negzaxis:   # rotate about Z axis?
+            self.get_logger().error(f"rotation not about Z axis, axis =  {axis}")
+            return           
+        s += ', dt={:.2f}, new angle={:.2f}'.format(dt, angle_deg)
+        self.get_logger().info(s)
+        finished = abs(angle_deg - last_angle_deg ) < 1
+        finished = finished or (prev_zrot > angle) and (prev_zrot > self.last_angle) and (angle <= self.last_angle)
+        finished = finished or (prev_zrot < angle) and (prev_zrot < self.last_angle) and (angle >= self.last_angle)
+        if finished:
             self.duration = 0
+            self.finish_angle = angle
+            self.get_logger().info("last angle: requested = {:.2f}, actual = {:.2f}".format(self.last_angle * self.rad2deg, angle * self.rad2deg))
             self.publish_result()
 
     def rotatezaxis_relative(self, angular_velocity):
@@ -134,12 +136,12 @@ class RotateZAxis(Node):
             self.handle_rotate_relative(turn_angle, angular_velocity, start_angle, end_angle)
         if 'error' in self.response['message']:
             return self.response
-        self.response['elapsed_time'] = self.current_time - self.starting_time     
+        self.response['elapsed_time'] = self.current_time - self.starting_time
         self.response['message'] += ' last_angle {:.2f} elapsed_time {:.2f}'.format(self.response['last_angle'], self.response['elapsed_time'])
         self.get_logger().info('Returning response: ' + self.response['message'])
         return self.response
     
-    def handle_rotate_relative(self, turn_angle, angular_velocity, start_angle, end_angle):
+    def handle_rotate_relative_old(self, turn_angle, angular_velocity, start_angle, end_angle):
         self.response['at_end'] = False
         if start_angle < 0:
             self.response['message'] = "error: starting angle " + str(start_angle) + " must be positive"
@@ -163,24 +165,70 @@ class RotateZAxis(Node):
                 last_angle = end_angle
         else:
             last_angle = start_angle - turn_angle
-            if last_angle < 0:
-                last_angle += (2 * np.pi)
             if last_angle < end_angle:
                 self.response['at_end'] = True
                 self.response['message'] = 'robot at end angle'
                 turn_angle = end_angle - start_angle
                 last_angle = end_angle
+            last_angle = self.positive_angle(last_angle)
 
         duration = abs(turn_angle / angular_velocity)        
-        self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(turn_angle, duration))
         self.response['last_angle'] = last_angle
         self.response['success'] = True
         self.starting_time = self.current_time
         if turn_angle != 0:
+            self.get_logger().info('Starting rotation: turn_angle {0} duration {1}'.format(turn_angle, duration))
             self.rotatezaxis_relative(angular_velocity)
             self.duration = duration
             self.finish_event.wait()
             self.finish_event.clear()
+    
+    def handle_rotate_relative(self, turn_angle, angular_velocity, start_angle, end_angle):
+        self.response['at_end'] = False
+        if start_angle < 0:
+            self.response['message'] = "error: starting angle " + str(start_angle) + " must be positive"
+            self.get_logger().error(self.response['message'])
+            return self.response
+        if end_angle < 0:
+            self.response['message'] = "error: ending angle " + str(end_angle) + " must be positive"
+            self.get_logger().error(self.response['message'])
+            return self.response
+        if end_angle < start_angle:
+            self.response['message'] = "error: ending angle must be greater than starting angle"
+            self.get_logger().error(self.response['message'])
+            return self.response
+        self.get_logger().info('Requesting rotation: turn_angle {:.2f} angular_velocity {:.2f} start_angle {:.2f}'.format(turn_angle, angular_velocity, start_angle))         
+        current_angle = self.zrot
+        self.finish_angle = current_angle
+        if turn_angle > (end_angle - start_angle):
+            self.response['at_end'] = True
+            self.response['message'] = 'robot at end angle'
+            turn_angle = abs(end_angle - start_angle)
+        if angular_velocity > 0:
+            if current_angle < 1e-3:
+                current_angle = 2 * np.pi
+            self.last_angle = current_angle + turn_angle 
+        else:       
+            self.last_angle = current_angle - turn_angle       
+            self.last_angle = self.positive_angle(self.last_angle)
+        self.get_logger().info('Before rotation: current angle {:.2f} last angle {:.2f}'.format(current_angle * self.rad2deg, self.last_angle * self.rad2deg))        
+        duration = abs(turn_angle / angular_velocity)        
+        self.response['success'] = True
+        self.starting_time = self.current_time
+
+        if turn_angle != 0:
+            self.get_logger().info('Starting rotation: turn_angle {:.2f} duration {:.2f}'.format(turn_angle, duration))
+            self.rotatezaxis_relative(angular_velocity)
+            self.duration = duration
+            self.finish_event.wait()
+            self.finish_event.clear()
+        if angular_velocity > 0:
+            turn_amount = self.finish_angle - current_angle
+            self.response['last_angle'] = start_angle + turn_amount
+        else:
+            turn_amount = current_angle - self.finish_angle
+            self.response['last_angle'] = self.positive_angle(start_angle - turn_amount)
+        self.get_logger().info('turn amount requested: {:.2f}, actual {:.2f}'.format(turn_angle, turn_amount))
     
     def handle_rotate_absolute(self, turn_angle, angular_velocity):
         self.last_angle = turn_angle
@@ -188,7 +236,7 @@ class RotateZAxis(Node):
         flip_last_angle = False
         if (angular_velocity < 0) and (turn_angle > self.zrot):  # turn through 0:
             self.last_angle = 2 * np.pi - turn_angle
-            flip_last_angle = True
+            #flip_last_angle = True
             amount_to_turn = self.zrot + self.last_angle
         if (angular_velocity > 0) and (turn_angle < self.zrot):  # turn through 0:
             amount_to_turn = (2 * np.pi - self.zrot) + turn_angle                     

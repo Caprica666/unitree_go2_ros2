@@ -27,17 +27,17 @@ def generate_launch_description():
             remappings=[('cloud_in', '/unitree_lidar/points'),
                         ('scan','/scan')],
             parameters=[{
- #               'target_frame': 'base_link',
+                'target_frame': 'base_link',
                 'use_sim_time': True,
                 'transform_tolerance': 0.01,
-                'min_height': 0.0,
+                'min_height': 0.02,
                 'max_height': 1.0,
-                'angle_min': -1.5708,  # -M_PI/2
-                'angle_max': 1.5708,  # M_PI/2
+                'angle_min': -3.1415, # -1.5708,  # -M_PI/2
+                'angle_max': 3.1416, # 1.5708,  # M_PI/2
                 'angle_increment': 0.0087,  # M_PI/360.0
                 'scan_time': 0.3333,
-                'range_min': 0.45,
-                'range_max': 4.0,
+                'range_min': 0.3,
+                'range_max': 10.0,
                 'use_inf': True,
                 'inf_epsilon': 1.0
             }],

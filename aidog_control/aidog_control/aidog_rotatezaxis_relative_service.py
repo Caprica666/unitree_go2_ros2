@@ -13,7 +13,7 @@ class RotateZAxisRelativeService(RotateZAxis):
         self.srv = self.create_service(RotateZAxisRelative,
                                        'aidog_rotatezaxis_relative',
                                        self.rotatezaxis_callback,
-                                       callback_group = self.callback_group)
+                                       callback_group = rclpy.callback_groups.ReentrantCallbackGroup())
         self.get_logger().info('aidog_rotatezaxis_relative service is ready.')
         
     def rotatezaxis_callback(self, request, response):

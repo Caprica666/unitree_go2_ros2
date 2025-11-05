@@ -1,4 +1,5 @@
 #!/home/nolad/projects/robotics/dog_ws/.venv/bin/python3
+import threading
 import unittest
 import pytest
 import rclpy
@@ -69,17 +70,23 @@ class TestWebRotateZAxisRelativeService(unittest.TestCase):
         self.timeout = 20.0
         self.robot_url = "http://localhost:5000/aidog_rotatezaxis_relative"
         self.event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.event_loop) 
+        asyncio.set_event_loop(self.event_loop)
+        self.executor = rclpy.executors.MultiThreadedExecutor()
+        self.spin_thread = threading.Thread(target=self.executor.spin, daemon=True)
+        self.spin_thread.start() 
         
     @classmethod
     def tearDownClass(self):
         # Shutdown the ROS context
+        self.executor.shutdown()
         rclpy.shutdown()
                 
     def setUp(self):
         self.node = rclpy.create_node('test_web_rotatezaxis_relative_service')
+        self.executor.add_node(self.node)
                 
     def tearDown(self):
+        self.executor.remove_node(self.node)
         self.node.destroy_node()
 
     async def sendGetRequest(self, request):
@@ -155,6 +162,7 @@ class TestWebRotateZAxisRelativeService(unittest.TestCase):
             self.assertFalse(response['at_end'])
             self.assertEqual(round(response['last_angle']), 30)
             self.assertEqual(round(response['elapsed_time']), duration)
+            self.assertGreaterEqual(len(msgs_rx), 1)
         finally:
             self.node.destroy_subscription(sub)
             
@@ -180,6 +188,7 @@ class TestWebRotateZAxisRelativeService(unittest.TestCase):
             self.assertFalse(response['at_end'])
             self.assertEqual(round(response['last_angle']), 30)
             self.assertEqual(round(response['elapsed_time']), duration)
+            self.assertGreaterEqual(len(msgs_rx), 1)
         finally:
             self.node.destroy_subscription(sub)
         
@@ -205,49 +214,48 @@ class TestWebRotateZAxisRelativeService(unittest.TestCase):
             self.assertFalse(response['at_end'])
             self.assertEqual(round(response['last_angle']), 30)
             self.assertEqual(round(response['elapsed_time']), duration)
+            self.assertGreaterEqual(len(msgs_rx), 1)
         finally:
             self.node.destroy_subscription(sub)
     
-    def atest_get_rotateneg30(self):
-        """Test -30 degree rotation"""
+    def test_get_rotate30_counter(self):
+        """Test 30 degree rotation counterclockwise"""
         msgs_rx = []
         sub = self.node.create_subscription(
                 Twist, 'cmd_vel',
                 lambda msg: msgs_rx.append(msg), 10)
-        self.node.get_logger().info('Subscribing to cmd_vel topic')
 
         try:      
             request = { }
-            request['turn_angle'] = -30.0
+            request['turn_angle'] = 30.0
             request['current_angle'] = 0.0
-            request['angular_velocity'] = 10.0
-            request['end_angle'] = -180.0
+            request['angular_velocity'] = -10.0
+            request['end_angle'] = 180.0
             duration = abs(request['turn_angle'] / request['angular_velocity'])
 
             response = asyncio.run(self.sendGetRequest(request))
             self.assertIsNotNone(response)
             self.assertTrue(response['success'])
             self.assertFalse(response['at_end'])
-            self.assertEqual(round(response['last_angle']), -30)
+            self.assertEqual(round(response['last_angle']), 330)
             self.assertEqual(round(response['elapsed_time']), duration)
-            self.assertGreater(len(msgs_rx), 1)
+            self.assertGreaterEqual(len(msgs_rx), 1)
         finally:
             self.node.destroy_subscription(sub)
             
     def test_get_rotateneg30fail(self):
-        """Test -30 degree rotation with incorrect end_angle"""
+        """Test 30 degree rotation with incorrect end_angle"""
         msgs_rx = []
         sub = self.node.create_subscription(
                 Twist, 'cmd_vel',
                 lambda msg: msgs_rx.append(msg), 10)
-        self.node.get_logger().info('Subscribing to cmd_vel topic')
 
         try:
             request = { }
-            request['turn_angle'] = -30.0
+            request['turn_angle'] = 30.0
             request['current_angle'] = 0.0
             request['angular_velocity'] = 10.0
-            request['end_angle'] = 180.0
+            request['end_angle'] = -180.0
 
             response = asyncio.run(self.sendGetRequest(request))
             self.assertIsNotNone(response)
@@ -256,29 +264,29 @@ class TestWebRotateZAxisRelativeService(unittest.TestCase):
         finally:
             self.node.destroy_subscription(sub)
             
-    def test_get_turn_robot_camera_end_angle_neg(self):
-        """Test -30 degree rotation with correct end_angle"""
+    def test_rotate30_atend(self):
+        """Test 30 degree rotation with correct end_angle"""
         msgs_rx = []
         sub = self.node.create_subscription(
                 Twist, 'cmd_vel',
                 lambda msg: msgs_rx.append(msg), 10)
-        self.node.get_logger().info('Subscribing to cmd_vel topic')
       
         try:
             request = { }
-            request['turn_angle'] = -30.0
-            request['current_angle'] = -60.0
+            request['turn_angle'] = 30.0
+            request['current_angle'] = 60.0
             request['angular_velocity'] = 10.0
-            request['end_angle'] = -70.0
-            duration = abs(-10 / request['angular_velocity'])
+            request['end_angle'] = 70.0
+            duration = abs(10 / request['angular_velocity'])
 
             response = asyncio.run(self.sendGetRequest(request))
             self.assertIsNotNone(response)
             self.assertTrue(response['success'])
             self.assertTrue(response['at_end'])
-            self.assertEqual(round(response['last_angle']), -70)
+            self.assertEqual(round(response['last_angle']), 70)
             self.assertEqual(round(response['elapsed_time']), duration)
             self.assertIn('robot at end angle', response['message'])
+            self.assertGreaterEqual(len(msgs_rx), 1)
         finally:
             self.node.destroy_subscription(sub)
 
