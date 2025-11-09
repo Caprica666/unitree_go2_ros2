@@ -27,7 +27,7 @@ def generate_launch_description():
             remappings=[('cloud_in', '/unitree_lidar/points'),
                         ('scan','/scan')],
             parameters=[{
-                'target_frame': 'base_link',
+                'target_frame': 'lidar_scan_link',
                 'use_sim_time': True,
                 'transform_tolerance': 0.01,
                 'min_height': 0.02,

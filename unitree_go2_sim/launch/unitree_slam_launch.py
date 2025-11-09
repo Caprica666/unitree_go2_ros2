@@ -192,7 +192,7 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             unitree_go2_description,
             'worlds',
-            'dogworld.sdf'
+            'smalldogworld.sdf'
         ])}.items(),
     )
     
